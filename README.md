@@ -7,5 +7,5 @@ What can this extension do:
 Usage:
 - Clone this repository.
 - Run `make install` to install native messaging host. May require root privileges.
-- Run `make` to generate `.xpi` file, and 
+- Run `make` to generate `.xpi` file, then install the extension in firefox.
 - Run `make uninstall` to uninstall.
