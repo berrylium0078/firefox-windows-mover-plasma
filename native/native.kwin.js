@@ -1,11 +1,14 @@
 
 SERVICE_NAME = 'org.mozilla.firefox'
 OBJECT_PATH = '/extension/berrylium/windowsmover'
-INTERFACE_NAME = 'local.py.agent.KWinScriptAgent'
+INTERFACE_NAME = 'local.firefox_windows_mover_native_host.KWinScriptAgent'
+
 // snippet
 function callService(...args) {
     callDBus(SERVICE_NAME, OBJECT_PATH, INTERFACE_NAME, ...args)
 }
+
+print('hello')
 
 // simple debug function
 function verbose(obj) {
