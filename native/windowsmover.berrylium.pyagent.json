@@ -1,0 +1,7 @@
+{
+    "name": "windowsmover.berrylium.pyagent",
+    "description": "communicate with kwin script",
+    "path": "/usr/bin/firefox-windows-mover-native-host",
+    "type": "stdio",
+    "allowed_extensions": ["windowsmoverplasma@berrylium"]
+}
