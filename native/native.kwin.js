@@ -75,7 +75,7 @@ function trackWindow(window) {
             sendWindowPosition()
         } else {
             moveWindow(msg.desktops, msg.activities)
-            sendWindowPosition()
+            //sendWindowPosition()
         }
     }
     var onClosed = function() {
@@ -83,8 +83,8 @@ function trackWindow(window) {
     }
     var onNewFirefoxWindowDetected = function() {
         window_by_ID.set(id, dealWithMessage)
-        window.desktopsChanged.connect(sendWindowPosition)
-        window.activitiesChanged.connect(sendWindowPosition)
+        window.desktopsChanged.connect(() => {print('desktop change');sendWindowPosition()})
+        window.activitiesChanged.connect(() => {print('activity change');sendWindowPosition()})
         window.closed.connect(onClosed)
     }
     if (window.desktopFileName == 'firefox') { /* maybe we can add more filters here? */
@@ -110,11 +110,17 @@ windowList = workspace.windowList()
 for (i in windowList) trackWindow(windowList[i])
 
 function onMessage(msg) {
-    messageDealer = window_by_ID.get(msg.winID)
-    messageDealer(msg)
+    print(verbose(msg))
+    if (msg.winID === undefined) {
+        workspace.currentDesktop = workspace.desktops.find((desktop) => desktop.id == msg.desktop)
+        workspace.currentActivity = msg.activity
+    } else {
+        messageDealer = window_by_ID.get(msg.winID)
+        messageDealer(msg)
+    }
 }
 function onTimer() {
-    callService('getPendingMessage', function(list){
+    callService('getPendingMessage', function(list) {
         for(let i = 0; i < list.length; i++)
             onMessage(list[i]);
     })
