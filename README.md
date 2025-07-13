@@ -1,24 +1,35 @@
-# firefox-windows-mover-plasma
+# Firefox Extension Plasma Desktop Fix
+
+## Description
+
+I'm using KDE + Wayland, but appearantly Firefox has no aware of the virtual desktop system, so I wrote this extension to fix this problem.
 
 What can this extension do:
-- Ensure new windows/tabs appear on the current virtual desktop and activity.
-- Remember the last used desktops for each window, and restore them when the window is reopened.
+1. Attach new tabs to the latest focused window that is on the current virtual desktop (& activity).
+2. When a window is reopened (shortcut Ctrl+Shift+N), it will be moved back to where it had been before it was closed.
 
-How it works:
-- It employs a local host to move the windows around and listen for desktop events.
-- The window id will be shown in the window's title(should be hidden by default), in order that the local host can identify them.
-- When a tab is created in another desktop, it will be moved to a new window that will be moved to the current desktop.
+This extension only supports KDE, but forks or pull requests are welcomed.
 
-Currently, this extension only works on Plasma desktop environment, and I have no intention to migrate to other DE/OS.
-Forks or pull requests are welcomed.
+## Usage
 
-Usage:
 - Clone this repository.
-- Run `make install` to install native messaging host. May require root privileges.
-- Run `make` to generate `.xpi` file, then install the extension in firefox.
-- Run `make uninstall` to uninstall.
+- You can search for 'Plasma Desktop Fix' to install the extension. You can also run `make` to build the `.xpi`.
+- Run `sudo make install` to install native messaging host, and `sudo make uninstall` to uninstall.
 
-Known issues:
-- When opening a desktop entry, the desktop environment may switch to the desktop where the created tab is located.
-  - It's recommended to modify the system settings: Go to Window Behavior > Advanced > Virtual Desktop behavior > When activating a window on a different Virtual Desktop, switch it to 'Do nothing'.
-  - Although I have added a fix, which forcefully switches back to the previous desktop when the tab is created. But somehow it doesn't work when the window is located in a different activity and different desktop, and the above setting is 'switch to that Virtual Desktop'.
+## How it works
+
+- It employs a native host to manipulate the window system, and listen for events. Implemented with KWinScript and PyQDbus.
+- The window id will be shown in the window's title (hidden since Firefox doesn't use the system title bar), in order that the local host can identify them.
+
+- When a tab is created in the wrong window, we can forcefully move it back.
+  - A tab is considered to belong to the desktop you was a moment ago. (currently 100ms)
+  - However, if you open a new window immediately after switching desktop, such action will be misinterpreted.
+
+## Issues
+
+- May break under intense operations.
+- "Open link in new window" might be mistaken and result in "Open in new tab".
+- Not well optimized, may have performance issues when there are too many windows.
+- Uses Firefox's session API, which is not compatible with other browser.
+- Due to Firefox's limitation, can only remember 5 windows (although documentation implies a maximum of 25 sessions).
+- Appears that KWinScripts can't listen for a DBus signal. A workaround is to ask for incoming messages periodically (e.g. every 20ms).

@@ -1,14 +1,17 @@
-
-SERVICE_NAME = 'org.mozilla.firefox'
-OBJECT_PATH = '/extension/berrylium/windowsmover'
+SERVICE_NAME = 'org.berrylium.firefox.windowsmover'
+OBJECT_PATH = '/'
 INTERFACE_NAME = 'local.firefox_windows_mover_native_host.KWinScriptAgent'
 
 // snippet
 function callService(...args) {
     callDBus(SERVICE_NAME, OBJECT_PATH, INTERFACE_NAME, ...args)
 }
-
-print('hello')
+function debug(str) {
+    callService('sendMessage', {
+        type: "log.native",
+        info: str
+    })
+}
 
 // simple debug function
 function verbose(obj) {
@@ -31,23 +34,29 @@ function verbose(obj) {
 
 function sendCurrentDesktop() {
     callService('sendMessage', {
-        desktop: workspace.currentDesktop.id,
-        activity: workspace.currentActivity
+        type: "desktop.update",
+        desk: workspace.currentDesktop.id,
+        actv: workspace.currentActivity
     })
 }
+
 sendCurrentDesktop()
 workspace.currentDesktopChanged.connect(sendCurrentDesktop)
 workspace.currentActivityChanged.connect(sendCurrentDesktop)
 
-
 GET_ID_REGEX = /^[0-9]*$/
+var ID_PREFIX = ''
+var ID_SUFFIX = ''
+
 function getFirefoxWindowID(caption) {
-    const parts = caption.split('@', 1)
+    const len = ID_PREFIX.length;
+    if (caption.slice(0, len) !== ID_PREFIX)
+        return undefined;
+    const parts = caption.slice(len).split(ID_SUFFIX, 1)
     if (parts.length >= 1 && GET_ID_REGEX.test(parts[0]))
         return Number(parts[0]);
     return undefined;
 }
-
 
 // sorry I'm not familiar with OOP in JS, so I'm using a closure!
 window_by_ID = new Map()
@@ -59,9 +68,10 @@ function trackWindow(window) {
             desktopIDs = window.desktops.map((desktop) => desktop.id)
         var activityIDs = window.activities
         callService('sendMessage', {
-                winID: id,
-                desktops: desktopIDs,
-                activities: activityIDs
+                type: "window.update",
+                wid: id,
+                desks: desktopIDs,
+                actvs: activityIDs
             })
     }
     var moveWindow = function(desktops, activities) {
@@ -73,18 +83,26 @@ function trackWindow(window) {
     var dealWithMessage = function(msg) {
         if (msg.type === 'query') {
             sendWindowPosition()
-        } else {
-            moveWindow(msg.desktops, msg.activities)
-            //sendWindowPosition()
+        } else { // move
+            moveWindow(msg.desks, msg.actvs)
         }
     }
     var onClosed = function() {
-        window_by_ID.set(id, undefined)
+        window_by_ID.delete(id)
     }
     var onNewFirefoxWindowDetected = function() {
-        window_by_ID.set(id, dealWithMessage)
-        window.desktopsChanged.connect(() => {print('desktop change');sendWindowPosition()})
-        window.activitiesChanged.connect(() => {print('activity change');sendWindowPosition()})
+        debug(`new firefox window detected! ID: ${id}`)
+
+        var winData = window_by_ID.get(id);
+        if (winData === undefined) {
+            window_by_ID.set(id, {callback: dealWithMessage});
+        } else {
+            winData.orders.forEach(dealWithMessage);
+            winData.orders = undefined;
+            winData.callback = dealWithMessage;
+        }
+        window.desktopsChanged.connect(() => {debug('desktop change');sendWindowPosition()})
+        window.activitiesChanged.connect(() => {debug('activity change');sendWindowPosition()})
         window.closed.connect(onClosed)
     }
     if (window.desktopFileName == 'firefox') { /* maybe we can add more filters here? */
@@ -104,28 +122,44 @@ function trackWindow(window) {
         }
     }
 }
-// track all existing windows and future windows
-workspace.windowAdded.connect(trackWindow)
-windowList = workspace.windowList()
-for (i in windowList) trackWindow(windowList[i])
 
 function onMessage(msg) {
-    print(verbose(msg))
-    if (msg.winID === undefined) {
-        workspace.currentDesktop = workspace.desktops.find((desktop) => desktop.id == msg.desktop)
-        workspace.currentActivity = msg.activity
-    } else {
-        messageDealer = window_by_ID.get(msg.winID)
-        messageDealer(msg)
+    debug(verbose(msg))
+    if (msg.type == 'config') {
+        if (ID_PREFIX !== '') {
+            debug('Please restart the extension to reconfigure');
+            return;
+        }
+        ID_PREFIX = msg.ID_pattern.prefix;
+        ID_SUFFIX = msg.ID_pattern.suffix;
+        // track all existing windows and future windows
+        workspace.windowAdded.connect(trackWindow)
+        windowList = workspace.windowList()
+        for (i in windowList) trackWindow(windowList[i])
+    } else if (msg.type == 'query' || msg.type == 'move') {
+        var wid = msg.winID;
+        var data = window_by_ID.get(wid);
+        if (data === undefined) {
+            window_by_ID.set(wid, {orders: [msg]});
+        } else if (data.callback === undefined) {
+            data.orders.push(msg);
+        } else {
+            data.callback(msg);
+        }
+    } else if (msg.type == 'switch desktop') {
+        workspace.currentDesktop = workspace.desktops.find((desk) => desk.id == msg.desk)
+        workspace.currentActivity = msg.actv
     }
 }
-function onTimer() {
-    callService('getPendingMessage', function(list) {
+
+
+timer = new QTimer()
+timer.interval = 20 // ms
+timer.timeout.connect(() => {
+    callService('checkMessage', function(list) {
         for(let i = 0; i < list.length; i++)
             onMessage(list[i]);
     })
-}
-timer = new QTimer()
-timer.interval = 20 // ms
-timer.timeout.connect(onTimer);
+
+});
 timer.start()

@@ -4,7 +4,7 @@ NATIVE_APP := /usr/bin/firefox-windows-mover-native-host
 SCRIPT_PATH = /usr/share/kwin/scripts/firefox-windows-mover
 
 build:
-	@cd src && zip -FS -r ../windows-mover.xpi ./*
+	@cd browser && zip -FS -r ../windows-mover.xpi ./*
 
 clean:
 	@rm -f windows-mover.xpi

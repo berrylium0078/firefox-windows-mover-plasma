@@ -1,22 +1,29 @@
 #!/usr/bin/python3
 import os, sys, json, struct, threading, signal, time
-from PyQt6.QtCore import QObject, pyqtSlot, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSlot, pyqtSignal, QTimer, QEventLoop
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
 
 # constants
-SERVICE_NAME = "org.mozilla.firefox"
-OBJECT_PATH = "/extension/berrylium/windowsmover"
+SERVICE_NAME = "org.berrylium.firefox.windowsmover"
+OBJECT_PATH = "/"
 SCRIPT_NAME = 'native.kwin.js'
 SCRIPT_PATH = '/usr/share/kwin/scripts/firefox-windows-mover'
 # SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 # for logging
-#logFile = open('/tmp/activityintegration.log', 'w')
 def log(str):
+    message = json.dumps({
+            "type": "log",
+            "info": str,
+            "time": time.strftime('%Y%m%d %H:%M:%S', time.localtime()) 
+        }, indent=None, separators=(',', ':')).encode('utf-8')
+
+    length = struct.pack('@I', len(message))
+    sys.stdout.buffer.write(length)
+    sys.stdout.buffer.write(message)
+    sys.stdout.buffer.flush()
     return
-    time_str = time.strftime('%Y%m%d %H:%M:%S', time.localtime())
-    print(f'[{time_str}]: {str}', file=logFile, flush=True)
 
 # listen for messages from firefox
 class FirefoxListener(QObject):
@@ -43,18 +50,16 @@ class KWinScriptAgent(QObject):
     # receive message from firefox
     @pyqtSlot(str)
     def receiveMessage(self, message):
-        log(f'firefox => {message}')
         self.message.append(json.loads(message))
 
     # check incoming messages from firefox
     @pyqtSlot(result=list)
-    def getPendingMessage(self):
+    def checkMessage(self):
         result, self.message = self.message, []
         return result
     # send message to firefox
     @pyqtSlot('QVariantMap')
     def sendMessage(self, obj):
-        log(f'kwin => {obj}')
         message = json.dumps(obj, indent=None, separators=(',', ':')).encode('utf-8')
         length = struct.pack('@I', len(message))
         sys.stdout.buffer.write(length)
@@ -69,6 +74,7 @@ if __name__ == '__main__':
     agent = KWinScriptAgent()
     listener.messageReceived.connect(agent.receiveMessage)
 
+
     # make Qt responsive to UNIX signals
     # not necessary since KWin script will call getPendingMessage() periodically
     timer = QTimer()
@@ -77,9 +83,19 @@ if __name__ == '__main__':
     timer.start()
 
     # register DBus interface for kwin agent
-    if not bus.registerService(SERVICE_NAME):
+
+    max_retry = 5
+    while max_retry > 0:
+        if bus.registerService(SERVICE_NAME):
+            break
+        max_retry -= 1
         log("Failed to register D-Bus service!")
-        exit(1)
+        if max_retry == 0:
+            log(f"Fatal Error!")
+            exit(1)
+        log(f"{max_retry} retries left. Retrying in 5 seconds...")
+        time.sleep(5)
+
     if not bus.registerObject(OBJECT_PATH, agent, QDBusConnection.RegisterOption.ExportAllSlots):
         log("Failed to register D-Bus object!")
         exit(1)
