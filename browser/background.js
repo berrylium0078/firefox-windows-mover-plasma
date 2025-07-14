@@ -165,12 +165,16 @@ function onTabCreated(tab) {
     }
 }
 
+function updateWindowCaption(wid) {
+    // Rename the windows, in order that our native script can identify them.
+    browser.windows.update(wid, { titlePreface: `#${wid}@` });
+}
+
 function onWindowCreated(wid) {
     // We need to check whether the window is created, or restored,
     // or for faulty tabs to inhabit.
 
-    // Rename the windows, in order that our native script can identify them.
-    browser.windows.update(wid, { titlePreface: `#${wid}@` });
+    updateWindowCaption(wid);
 
     var desk = curDesk;
     var actv = curActv;
@@ -225,6 +229,7 @@ function addWindow(wid) {
         type: "query",
         winID: wid,
     });
+    updateWindowCaption(wid);
 }
 
 function onWindowRemoved(wid) {
