@@ -6,11 +6,14 @@ INTERFACE_NAME = 'local.firefox_windows_mover_native_host.KWinScriptAgent'
 function callService(...args) {
     callDBus(SERVICE_NAME, OBJECT_PATH, INTERFACE_NAME, ...args)
 }
+function sendMessage(msg) {
+    callService('sendMessage', msg);
+}
 function debug(str) {
-    callService('sendMessage', {
+    sendMessage({
         type: "log.native",
         info: str
-    })
+    });
 }
 
 // simple debug function
@@ -32,17 +35,30 @@ function verbose(obj) {
     return str
 }
 
-function sendCurrentDesktop() {
-    callService('sendMessage', {
+var targetDesktop = undefined
+sendMessage({
+    type: "desktop.update",
+    desk: workspace.currentDesktop.id,
+    actv: workspace.currentActivity
+})
+workspace.currentDesktopChanged.connect(() => {
+    sendMessage({
         type: "desktop.update",
         desk: workspace.currentDesktop.id,
         actv: workspace.currentActivity
     })
-}
-
-sendCurrentDesktop()
-workspace.currentDesktopChanged.connect(sendCurrentDesktop)
-workspace.currentActivityChanged.connect(sendCurrentDesktop)
+})
+workspace.currentActivityChanged.connect(() => {
+    if (targetDesktop !== undefined) {
+        workspace.currentDesktop = targetDesktop;
+        targetDesktop = undefined;
+    }
+    sendMessage({
+        type: "desktop.update",
+        desk: workspace.currentDesktop.id,
+        actv: workspace.currentActivity
+    })
+})
 
 GET_ID_REGEX = /^[0-9]*$/
 var ID_PREFIX = ''
@@ -67,12 +83,12 @@ function trackWindow(window) {
         if (!window.onAllDesktops)
             desktopIDs = window.desktops.map((desktop) => desktop.id)
         var activityIDs = window.activities
-        callService('sendMessage', {
-                type: "window.update",
-                wid: id,
-                desks: desktopIDs,
-                actvs: activityIDs
-            })
+        sendMessage({
+            type: "window.update",
+            wid: id,
+            desks: desktopIDs,
+            actvs: activityIDs
+        })
     }
     var moveWindow = function(desktops, activities) {
         let targetActivities = new Set(activities)
@@ -92,7 +108,6 @@ function trackWindow(window) {
     }
     var onNewFirefoxWindowDetected = function() {
         debug(`new firefox window detected! ID: ${id}`)
-
         var winData = window_by_ID.get(id);
         if (winData === undefined) {
             window_by_ID.set(id, {callback: dealWithMessage});
@@ -101,8 +116,8 @@ function trackWindow(window) {
             winData.orders = undefined;
             winData.callback = dealWithMessage;
         }
-        window.desktopsChanged.connect(() => {debug('desktop change');sendWindowPosition()})
-        window.activitiesChanged.connect(() => {debug('activity change');sendWindowPosition()})
+        window.desktopsChanged.connect(sendWindowPosition)
+        window.activitiesChanged.connect(sendWindowPosition)
         window.closed.connect(onClosed)
     }
     if (window.desktopFileName == 'firefox') { /* maybe we can add more filters here? */
@@ -124,7 +139,6 @@ function trackWindow(window) {
 }
 
 function onMessage(msg) {
-    debug(verbose(msg))
     if (msg.type == 'config') {
         if (ID_PREFIX !== '') {
             debug('Please restart the extension to reconfigure');
@@ -147,8 +161,13 @@ function onMessage(msg) {
             data.callback(msg);
         }
     } else if (msg.type == 'switch desktop') {
-        workspace.currentDesktop = workspace.desktops.find((desk) => desk.id == msg.desk)
-        workspace.currentActivity = msg.actv
+        targetDesktop = workspace.desktops.find((desk) => desk.id == msg.desk);
+        if (workspace.currentActivity !== msg.actv) {
+            workspace.currentActivity = msg.actv;
+        } else if (targetDesktop !== undefined) {
+            workspace.currentDesktop = targetDesktop;
+            targetDesktop = undefined;
+        }
     }
 }
 

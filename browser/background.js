@@ -8,12 +8,8 @@ port.postMessage({
     }
 });
 
-/* windowData = {desks: Set(string), actvs: Set(string), timer: maybe(int) } */
-function newWindowData() {
-    return {desks: new Set(), actvs: new Set()};
-}
-
-/* windowID: int => windowData */
+// windowData = {desks: Set(string), actvs: Set(string), timer: maybe(int) }
+// windowID: int => windowData
 var windows = new Map();
 
 /* check if a window (given its ID) is visible on (desk, actv) */
@@ -68,7 +64,7 @@ function onMessageReceived(msg) {
                     curDesk = msg.desk;
                     curActv = msg.actv;
                     switchTimer = undefined;
-                }, 1000);
+                }, 100);
         }
     } else if (msg.type == 'window.update') {
         var window = windows.get(msg.wid);
@@ -100,6 +96,7 @@ function onTabCreated(tab) {
     var wid = tab.windowId;
 
     console.log(`new tab: ${tid} ${wid}`)
+    console.log(`current: ${curDesk} ${curActv}`)
 
     if (!windows.has(wid)) {
         // this window is recently created
@@ -115,8 +112,6 @@ function onTabCreated(tab) {
     if (target_wid === wid) return;
 
     console.log(`faulty tab detected: ${tid} ${wid} => ${target_wid}`)
-    console.log(`${switchTimer}`)
-    console.log(`current: ${curDesk} ${curActv}`)
     if (switchTimer !== -1) {
         if (switchTimer !== undefined)
             clearTimeout(switchTimer);
@@ -175,11 +170,7 @@ function onWindowCreated(wid) {
     // or for faulty tabs to inhabit.
 
     // Rename the windows, in order that our native script can identify them.
-    browser.windows.update(wid, { titlePreface: `#${wid}@` }).then(
-        () => console.log(`renamed window ${wid}`)
-    );
-
-    console.log(`new window: ${wid}`)
+    browser.windows.update(wid, { titlePreface: `#${wid}@` });
 
     var desk = curDesk;
     var actv = curActv;
@@ -257,7 +248,4 @@ browser.windows.getAll({windowTypes: ['normal']})
 
 browser.tabs.onCreated.addListener(onTabCreated);
 
-
 port.onMessage.addListener(onMessageReceived);
-
-console.log(`Hello World!`)
